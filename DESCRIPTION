@@ -1,0 +1,17 @@
+Type: Package
+Package: baltimorecensus
+Title: Baltimore Census Boundary Data
+Version: 0.1.0
+Authors@R: 
+    person("Eli", "Pousson", , "eli.pousson@gmail.com", role = c("aut", "cre", "cph"),
+           comment = c(ORCID = "0000-0001-8280-1706"))
+Maintainer: Eli Pousson <eli.pousson@gmail.com>
+Description: Convenient access to U.S. Census boundary data downloaded
+    with the tigris package for Baltimore city, Maryland.
+License: CC0
+Depends: 
+    R (>= 2.10)
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.2
