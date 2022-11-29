@@ -8,6 +8,14 @@
 \description{
 Convenient access to U.S. Census boundary data downloaded with the tigris package for Baltimore city, Maryland.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/elipousson/baltimorecensus}
+  \item Report bugs at \url{https://github.com/elipousson/baltimorecensus/issues}
+}
+
+}
 \author{
 \strong{Maintainer}: Eli Pousson \email{eli.pousson@gmail.com} (\href{https://orcid.org/0000-0001-8280-1706}{ORCID}) [copyright holder]
 
