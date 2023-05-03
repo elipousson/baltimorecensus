@@ -128,7 +128,7 @@ pull_table <- function(x, meta = FALSE, table = NULL, drop_vars = NULL, column =
 #' @param metadata Type of metadata to return, "table" or "column"
 #' @noRd
 load_census_reporter_metadata <- function(survey = "acs5",
-                                          year = 2020,
+                                          year = 2021,
                                           metadata = "table",
                                           ...) {
   if (stringr::str_detect(survey, "^acs")) {
@@ -141,8 +141,8 @@ load_census_reporter_metadata <- function(survey = "acs5",
 
   filename <- glue::glue("census_{metadata}_metadata.csv")
 
-  if (year == 2020 && survey == "acs5") {
-    url <- system.file("extdata", filename, package = "baltimorecensus")
+  if (year >= 2020 && survey == "acs5") {
+    url <- system.file("extdata", paste0(year, "_", filename), package = "baltimorecensus")
   } else {
     url <-
       paste0(
@@ -150,6 +150,7 @@ load_census_reporter_metadata <- function(survey = "acs5",
         folder, "/", filename
       )
   }
+  return(url)
 
   readr::read_csv(
     url,
@@ -210,6 +211,7 @@ try_cols_merge_uncert <- function(gt_object,
 #' @noRd
 fmt_est_moe <- function(gt_object,
                         cols = c("estimate", "moe"),
+                        est_col_label = "Est.",
                         spanner = NULL,
                         decimals = 0,
                         use_seps = TRUE) {
@@ -218,6 +220,9 @@ fmt_est_moe <- function(gt_object,
       columns = any_of(cols),
       decimals = decimals,
       use_seps = use_seps
+    ) |>
+    gt::cols_label(
+      .list = set_names(est_col_label, cols[[1]])
     )
 
   if (is.null(spanner)) {
@@ -234,6 +239,7 @@ fmt_est_moe <- function(gt_object,
 #' @noRd
 fmt_perc_moe <- function(gt_object,
                          cols = c("perc_estimate", "moe_perc"),
+                         perc_col_label = "% share",
                          spanner = NULL,
                          decimals = 0,
                          use_seps = TRUE) {
@@ -241,6 +247,9 @@ fmt_perc_moe <- function(gt_object,
     gt::fmt_percent(
       any_of(cols),
       decimals = decimals
+    ) |>
+    gt::cols_label(
+      .list = set_names(perc_col_label, cols[[1]])
     )
 
   if (is.null(spanner)) {
@@ -257,23 +266,46 @@ fmt_perc_moe <- function(gt_object,
 #' @noRd
 gt_census_cols <- function(gt_object,
                            est_cols = c("estimate", "moe"),
+                           est_col_label = "Est.",
                            perc_cols = c("perc_estimate", "moe_perc"),
+                           perc_col_label = "% share",
                            est_spanner = NULL,
                            perc_spanner = NULL,
                            column_title = NULL,
                            source = "Source: 2017-2021 ACS 5-year Estimates",
+                           tables = NULL,
                            decimals = 0) {
   stopifnot(
     rlang::has_name(gt_object[["_data"]], "column_title")
   )
 
   gt_object |>
-    fmt_est_moe(est_cols, decimals = decimals, spanner = est_spanner) |>
-    fmt_perc_moe(perc_cols, decimals = decimals, spanner = perc_spanner) |>
+    fmt_est_moe(est_cols, est_col_label, decimals = decimals, spanner = est_spanner) |>
+    fmt_perc_moe(perc_cols, perc_col_label, decimals = decimals, spanner = perc_spanner) |>
     gt::cols_label(
-    "column_title" = column_title %||% ""
-  ) |>
-    gt::tab_source_note(source)
+      "column_title" = column_title %||% ""
+    ) |>
+    gt_census_source(source, tables)
+}
+
+#' Add a source note to a table
+#'
+#' @noRd
+gt_census_source <- function(gt_object,
+                             source = "Source: 2017-2021 ACS 5-year Estimates",
+                             tables = NULL) {
+  if (!is_null(tables)) {
+    table_label <- "Table"
+    if (length(tables) > 1) {
+      table_label <- "Tables"
+    }
+
+    source <- glue::glue("{source}, {table_label} {knitr::combine_words(tables)}.")
+  } else {
+    source <- glue::glue("{source}.")
+  }
+
+  gt::tab_source_note(gt_object, source)
 }
 
 #' Helper for recoding based on a named list
@@ -305,7 +337,7 @@ has_name_ext <- function(x,
   }
 
   if (!is.null(ends_with)) {
-    has_nm <- has_nm & stringr::str_detect(nm, paste0(ends_with, "$",  collapse = "|"))
+    has_nm <- has_nm & stringr::str_detect(nm, paste0(ends_with, "$", collapse = "|"))
   }
 
   if (!is.null(contains)) {
@@ -327,14 +359,13 @@ combine_acs_geography_levels <- function(data,
                                          levels = NULL,
                                          .col = "name",
                                          ...) {
-
   data <-
     dplyr::bind_rows(
-    purrr::map(
-      data,
-      ~ readr::read_rds(here::here(.x))
+      purrr::map(
+        data,
+        ~ readr::read_rds(here::here(.x))
+      )
     )
-  )
 
   stopifnot(
     rlang::has_name(data, c(.col, c("table_title", "column_title", "variable")))
@@ -361,8 +392,8 @@ plot_theme <- function(...) {
 
 #' @noRd
 plot_fill_scale <- function(palette = "tol.bright", ..., type = "discrete") {
-  switch (type,
-          "discrete" = cols4all::scale_fill_discrete_c4a_cat(palette = palette, ...)
+  switch(type,
+    "discrete" = cols4all::scale_fill_discrete_c4a_cat(palette = palette, ...)
   )
 }
 
