@@ -1,0 +1,282 @@
+---
+title: "load_data"
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+
+```{r setup}
+library(baltimorecensus)
+library(tidyverse)
+library(forcats)
+library(pilot)
+library(stringr)
+```
+
+```{r}
+xwalk_blocks <- baltimorecensus::baltimore_blocks %>%
+  dplyr::left_join(
+    sf::st_drop_geometry(baltimorecensus::baltimore_tracts),
+    by = c("tractce20" = "tractce")
+  ) %>%
+  dplyr::select(
+    block = geoid20,
+    tract = geoid,
+    block_name = name20,
+    tract_name = namelsad,
+    housing20,
+    pop20
+  )
+
+inspire_plans_exp <-
+  mapbaltimore::inspire_plans |>
+  dplyr::filter(plan_name_short != "Bay Brook EMS") |>
+  sfext::st_buffer_ext(dist = 0.25, unit = "mi") |>
+  dplyr::bind_rows(
+    mapbaltimore::inspire_plans |>
+      dplyr::filter(plan_name_short == "Bay Brook EMS")
+  ) |> 
+  dplyr::select(name = plan_name_short)
+
+baltimore_city_inspire_mask <-
+  sfext::st_erase(
+  mapbaltimore::baltimore_city,
+  inspire_plans_exp
+  )
+
+xwalk_inspire_exp <-
+  xwalk_blocks |>
+  dplyr::select(block, tract, housing20, pop20) %>%
+  sf::st_transform(2804) %>%
+  sf::st_join(inspire_plans_exp |>
+                dplyr::bind_rows(
+                  sfext::st_erase(mapbaltimore::baltimore_city, inspire_plans_exp)
+                ),
+              left = FALSE, largest = TRUE) %>%
+  dplyr::filter(housing20 > 0) %>%
+  sf::st_set_geometry(NULL) %>%
+  dplyr::group_by(tract, name) %>%
+  dplyr::summarise(
+    pop20 = sum(pop20, na.rm = TRUE),
+    housing20 = sum(housing20, na.rm = TRUE)
+  ) %>%
+  dplyr::mutate(
+    weight_pop20 = round(pop20 / sum(pop20, na.rm = TRUE), digits = 2),
+    weight_housing20 = round(housing20 / sum(housing20, na.rm = TRUE), digits = 2)
+  ) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(name, tract, weight_pop20, weight_housing20) |>
+  dplyr::filter(name != "Baltimore city")
+
+xwalk_inspire <-
+  xwalk_blocks |>
+  dplyr::select(block, tract, housing20, pop20) %>%
+  sf::st_transform(2804) %>%
+  sf::st_join(mapbaltimore::inspire_plans |>
+                dplyr::select(name = plan_name_short) |>
+                dplyr::bind_rows(
+                  sfext::st_erase(mapbaltimore::baltimore_city, mapbaltimore::inspire_plans)
+                ),
+              left = FALSE, largest = TRUE) %>%
+  dplyr::filter(housing20 > 0) %>%
+  sf::st_set_geometry(NULL) %>%
+  dplyr::group_by(tract, name) %>%
+  dplyr::summarise(
+    pop20 = sum(pop20, na.rm = TRUE),
+    housing20 = sum(housing20, na.rm = TRUE)
+  ) %>%
+  dplyr::mutate(
+    weight_pop20 = round(pop20 / sum(pop20, na.rm = TRUE), digits = 2),
+    weight_housing20 = round(housing20 / sum(housing20, na.rm = TRUE), digits = 2)
+  ) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(name, tract, weight_pop20, weight_housing20) |>
+  dplyr::filter(name != "Baltimore city")
+
+census_table_metadata <-
+  load_census_reporter_metadata(year = 2021)
+
+census_column_metadata <-
+  load_census_reporter_metadata(year = 2021, metadata = "column")
+
+# Get Census data ----
+
+table_vars <-
+  c(
+    "B08201",
+    "B08105A",
+    "B08105B",
+    "B08119",
+    "B08130",
+    "B08134",
+    "B08137",
+    "B08406",
+    "B08603",
+    "B08141",
+    "B08534",
+    "B08536",
+    "B01003", # total pop
+    "B01001", # sex by age
+    "B03002", # race
+    "B05001", # foreign_born
+    # Employment Status
+    "B23025",
+    # tenure
+    "B25003",
+    # year moved in by tenure
+    "B25038",
+    # housing_cost
+    "B25106",
+    # housing cost as share of household income
+    "B25070",
+    # vehicles
+    "B08201",
+    # education
+    "B06009",
+    # median_income
+    "B19013",
+    # median income by race
+    "B19013A", "B19013B", "B19013C", "B19013D", "B19013E", "B19013F", "B19013G", "B19013H", "B19013I",
+    # Household income
+    "B19001",
+    # poverty
+    "C17002",
+    # pov_age
+    "B17024",
+    # Tenure by household type and preserve/age of own children
+    "B25115",
+    # Language Spoken at Home for the Population 5 Years and Over
+    "C16001",
+    # Households by Presence of People 65 Years and Over, Household Size and Household Type
+    "B11007",
+    # Other housing vars
+    "B07013",
+    # Sex by Age by Ambulatory Difficulty
+    # "C18105",
+    # School Enrollment by Level of School
+    "B14001",
+    # Educational Attainment
+    "B15003",
+    # Sex by Occupation for the Civilian Employed Population 16 Years and Over
+    "C24010",
+    "B25074", "B25014", "B05002", "B25015",
+    "B25014A", "B25014B", "B25014I", "B28008", "B14001", "B08012",
+    "B25003A", "B25003B", "B25003I"
+  ) %>%
+  unique()
+
+
+# select_counties <- c("Baltimore city, Maryland", "Baltimore County, Maryland", "Anne Arundel County, Maryland")
+
+county_acs <- purrr::map_dfr(
+  table_vars,
+  ~ tidycensus::get_acs(
+    geography = "county",
+    table = .x,
+    state = select_state,
+    year = 2021,
+    survey = "acs5",
+    cache = TRUE,
+    key = "91c1e586033430549708bd6c8d9a5695b9d50205"
+  )
+)
+
+county_acs_labelled <- county_acs %>%
+  janitor::clean_names("snake") %>%
+  mutate(
+    geography = "County"
+  ) %>%
+  label_acs()
+
+
+readr::write_rds(county_acs_labelled, "maryland_counties_acs2021_acs5yr.rda")
+
+
+msa_acs <- purrr::map_dfr(
+  table_vars,
+  ~ tidycensus::get_acs(
+    geography = "metropolitan/micropolitan statistical area",
+    table = .x,
+    year = 2021,
+    survey = "acs5",
+    cache = TRUE
+  )
+)
+
+msa_acs_labelled <- msa_acs %>%
+  janitor::clean_names("snake") %>%
+  mutate(
+    geography = "Metro area"
+  ) %>%
+  label_acs()
+
+readr::write_rds(msa_acs_labelled, "msa_acs2021_acs5yr.rda")
+
+
+tract_acs <- purrr::map_dfr(
+  table_vars,
+  ~ tidycensus::get_acs(
+    geography = "tract",
+    table = .x,
+    county = "Baltimore city",
+    state = select_state,
+    year = 2021,
+    survey = "acs5",
+    cache = TRUE
+  )
+)
+
+tract_acs_labelled <- tract_acs %>%
+  janitor::clean_names("snake") %>%
+  mutate(
+    geography = "Tract"
+  ) %>%
+  label_acs()
+
+readr::write_rds(tract_acs_labelled, "baltimorecity_tract_acs2021_acs5yr.rda")
+
+inspire_acs <-
+  xwalk_inspire %>%
+  dplyr::rename(
+    geoid = tract
+  ) |>
+  dplyr::left_join(select(tract_acs_labelled, -name), by = "geoid") %>%
+  dplyr::group_by(variable, name) %>%
+  dplyr::summarise(
+    estimate = round(sum(estimate * weight_housing20)),
+    moe = round(tidycensus::moe_sum(moe, estimate * weight_housing20))
+  ) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(
+    geography = "INSPIRE Area"
+  ) %>%
+  label_acs(perc = FALSE) %>%
+  calc_perc("name")
+
+inspire_exp_acs <-
+  xwalk_inspire_exp %>%
+  dplyr::rename(
+    geoid = tract
+  ) |>
+  dplyr::left_join(select(tract_acs_labelled, -name), by = "geoid") %>%
+  dplyr::group_by(variable, name) %>%
+  dplyr::summarise(
+    estimate = round(sum(estimate * weight_housing20)),
+    moe = round(tidycensus::moe_sum(moe, estimate * weight_housing20))
+  ) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(
+    geography = "INSPIRE Area (Expanded)"
+  ) %>%
+  label_acs(perc = FALSE) %>%
+  calc_perc("name")
+
+inspire_exp_acs$name <- paste0(inspire_exp_acs$name, " (Expanded)")
+
+readr::write_rds(inspire_exp_acs, "inspire_exp_acs2021_acs5yr.rda")
+```
