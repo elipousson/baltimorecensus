@@ -9,3 +9,4 @@ label_acs(data, survey = "acs5", year = 2021, perc = TRUE)
 \description{
 Label acs data using table and column metadata from Census Reporter
 }
+\keyword{internal}

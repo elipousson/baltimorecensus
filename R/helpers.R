@@ -3,6 +3,8 @@
 
 #' Label acs data using table and column metadata from Census Reporter
 #'
+#' @keywords internal
+#' @export
 label_acs <-
   function(data,
            survey = "acs5",
@@ -35,6 +37,8 @@ label_acs <-
     }
   }
 
+#' @keywords internal
+#' @export
 calc_perc <- function(x, denom_id = "geoid") {
   denom_x <- x %>%
     dplyr::filter(column_id %in% x$column_id_denom) %>%
@@ -57,13 +61,16 @@ calc_perc <- function(x, denom_id = "geoid") {
   x
 }
 
+#' @keywords internal
+#' @export
 add_tract_geometry <- function(x) {
   x %>%
     dplyr::left_join(mapbaltimore::baltimore_tracts, by = "geoid") %>%
     sf::st_as_sf()
 }
 
-
+#' @keywords internal
+#' @export
 simple_money_table <- function(x) {
   table_title <- unique(x$table_title)
 
@@ -85,6 +92,8 @@ simple_money_table <- function(x) {
     )
 }
 
+#' @keywords internal
+#' @export
 pull_table <- function(x, meta = FALSE, table = NULL, drop_vars = NULL, column = NULL, vars = NULL, geography = NULL) {
   x <- x %>%
     dplyr::filter(table_id %in% table)
@@ -126,7 +135,8 @@ pull_table <- function(x, meta = FALSE, table = NULL, drop_vars = NULL, column =
 #' @param survey Survey using options from [tidycensus::get_acs()]
 #' @param year Year of sample to return.
 #' @param metadata Type of metadata to return, "table" or "column"
-#' @noRd
+#' @keywords internal
+#' @export
 load_census_reporter_metadata <- function(survey = "acs5",
                                           year = 2021,
                                           metadata = "table",
@@ -207,7 +217,8 @@ try_cols_merge_uncert <- function(gt_object,
 
 #' Format estimate and MOE columns in a gt table
 #'
-#' @noRd
+#' @keywords internal
+#' @export
 fmt_est_moe <- function(gt_object,
                         cols = c("estimate", "moe"),
                         est_col_label = "Est.",
@@ -235,7 +246,8 @@ fmt_est_moe <- function(gt_object,
 
 #' Format % estimate and % MOE columns in a gt table
 #'
-#' @noRd
+#' @keywords internal
+#' @export
 fmt_perc_moe <- function(gt_object,
                          cols = c("perc_estimate", "moe_perc"),
                          perc_col_label = "% share",
@@ -262,7 +274,8 @@ fmt_perc_moe <- function(gt_object,
 
 #' Format Census estimate and percent estimate columns
 #'
-#' @noRd
+#' @keywords internal
+#' @export
 gt_census_cols <- function(gt_object,
                            est_cols = c("estimate", "moe"),
                            est_col_label = "Est.",
@@ -289,7 +302,8 @@ gt_census_cols <- function(gt_object,
 
 #' Add a source note to a table
 #'
-#' @noRd
+#' @keywords internal
+#' @export
 gt_census_source <- function(gt_object,
                              source = "Source: 2017-2021 ACS 5-year Estimates",
                              tables = NULL) {
@@ -309,7 +323,8 @@ gt_census_source <- function(gt_object,
 
 #' Helper for recoding based on a named list
 #'
-#' @noRd
+#' @keywords internal
+#' @export
 fct_recode_with_list <- function(x, list = NULL, in_order = TRUE) {
   x <- forcats::fct_recode(x, !!!list)
 
@@ -322,7 +337,8 @@ fct_recode_with_list <- function(x, list = NULL, in_order = TRUE) {
 
 #' Helper for checking name availability
 #'
-#' @noRd
+#' @keywords internal
+#' @export
 has_name_ext <- function(x,
                          name = NULL,
                          starts_with = NULL,
@@ -353,7 +369,8 @@ has_name_ext <- function(x,
 #' data.frame must include "table_title", "column_title", "variable" as column
 #' names. Filtered to values of levels in .col (defaults to "name")
 #'
-#' @noRd
+#' @keywords internal
+#' @export
 combine_acs_geography_levels <- function(data,
                                          levels = NULL,
                                          .col = "name",
