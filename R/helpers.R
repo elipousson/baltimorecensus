@@ -150,7 +150,6 @@ load_census_reporter_metadata <- function(survey = "acs5",
         folder, "/", filename
       )
   }
-  return(url)
 
   readr::read_csv(
     url,
