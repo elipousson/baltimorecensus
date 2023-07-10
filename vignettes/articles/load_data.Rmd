@@ -40,24 +40,27 @@ inspire_plans_exp <-
   dplyr::bind_rows(
     mapbaltimore::inspire_plans |>
       dplyr::filter(plan_name_short == "Bay Brook EMS")
-  ) |> 
+  ) |>
   dplyr::select(name = plan_name_short)
 
 baltimore_city_inspire_mask <-
   sfext::st_erase(
-  mapbaltimore::baltimore_city,
-  inspire_plans_exp
+    mapbaltimore::baltimore_city,
+    inspire_plans_exp
   )
 
 xwalk_inspire_exp <-
   xwalk_blocks |>
   dplyr::select(block, tract, housing20, pop20) %>%
   sf::st_transform(2804) %>%
-  sf::st_join(inspire_plans_exp |>
-                dplyr::bind_rows(
-                  sfext::st_erase(mapbaltimore::baltimore_city, inspire_plans_exp)
-                ),
-              left = FALSE, largest = TRUE) %>%
+  sf::st_join(
+    # FIXME: double-check assignment of blocks in cases with overlapping planning areas
+    inspire_plans_exp |>
+      dplyr::bind_rows(
+        sfext::st_erase(mapbaltimore::baltimore_city, inspire_plans_exp)
+      ),
+    left = FALSE, largest = TRUE
+  ) %>%
   dplyr::filter(housing20 > 0) %>%
   sf::st_set_geometry(NULL) %>%
   dplyr::group_by(tract, name) %>%
@@ -77,12 +80,14 @@ xwalk_inspire <-
   xwalk_blocks |>
   dplyr::select(block, tract, housing20, pop20) %>%
   sf::st_transform(2804) %>%
-  sf::st_join(mapbaltimore::inspire_plans |>
-                dplyr::select(name = plan_name_short) |>
-                dplyr::bind_rows(
-                  sfext::st_erase(mapbaltimore::baltimore_city, mapbaltimore::inspire_plans)
-                ),
-              left = FALSE, largest = TRUE) %>%
+  sf::st_join(
+    mapbaltimore::inspire_plans |>
+      dplyr::select(name = plan_name_short) |>
+      dplyr::bind_rows(
+        sfext::st_erase(mapbaltimore::baltimore_city, mapbaltimore::inspire_plans)
+      ),
+    left = FALSE, largest = TRUE
+  ) %>%
   dplyr::filter(housing20 > 0) %>%
   sf::st_set_geometry(NULL) %>%
   dplyr::group_by(tract, name) %>%
@@ -166,12 +171,15 @@ table_vars <-
     "C24010",
     "B25074", "B25014", "B05002", "B25015",
     "B25014A", "B25014B", "B25014I", "B28008", "B14001", "B08012",
-    "B25003A", "B25003B", "B25003I"
+    "B25003A", "B25003B", "B25003I",
+    # Table B25038: Tenure by Year Householder Moved Into Unit https://censusreporter.org/tables/B25038/
+    "B25038"
   ) %>%
   unique()
 
 
 # select_counties <- c("Baltimore city, Maryland", "Baltimore County, Maryland", "Anne Arundel County, Maryland")
+select_state <- "MD"
 
 county_acs <- purrr::map_dfr(
   table_vars,
@@ -200,7 +208,8 @@ readr::write_rds(county_acs_labelled, "maryland_counties_acs2021_acs5yr.rda")
 msa_acs <- purrr::map_dfr(
   table_vars,
   ~ tidycensus::get_acs(
-    geography = "metropolitan/micropolitan statistical area",
+    geography = "cbsa",
+    # state = select_state,
     table = .x,
     year = 2021,
     survey = "acs5",
@@ -239,6 +248,8 @@ tract_acs_labelled <- tract_acs %>%
   label_acs()
 
 readr::write_rds(tract_acs_labelled, "baltimorecity_tract_acs2021_acs5yr.rda")
+
+tract_acs_labelled <- readr::read_rds("baltimorecity_tract_acs2021_acs5yr.rda")
 
 inspire_acs <-
   xwalk_inspire %>%

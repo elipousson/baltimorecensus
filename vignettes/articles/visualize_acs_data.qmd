@@ -3,7 +3,7 @@ title: "visualize_acs_data"
 format: html
 editor: visual
 params:
-  save_plot: false
+  save_plot: true
 ---
 
 ```{r setup}
@@ -19,24 +19,39 @@ library(gt)
 # Load variables and data across geography levels
 
 ```{r}
-select_area <- "John Ruhrah EMS (Expanded)"
-select_area_name <- "John Ruhrah EMS Area"
-select_area_label <- "john-ruhrah-ems"
+# select_area <- "John Ruhrah EMS (Expanded)"
+# select_area_name <- select_area
+# select_area_name_plot <- "John Ruhrah EMS Area"
+# select_area_label <- "john-ruhrah-ems"
+
+select_area <- "Govans ES (Expanded)"
+select_area_name <- select_area
+select_area_name_plot <- "Govans ES Area"
+select_area_label <- "govans-es"
+select_fileext <- "png"
+
+# select_area <- "REACH + Harford Heights Area (Expanded)"
+# select_area_name <- "REACH and HH Building"
+# select_area_name_plot <- "REACH and HH Building Area"
+# select_area_label <- "reach-harford-heights"
+
 select_counties <- "Baltimore city, Maryland"
+select_counties_name <- "Baltimore City"
 select_state <- "MD"
 select_msa <- "Baltimore-Columbia-Towson, MD Metro Area"
+select_msa_name <- "Baltimore MSA"
 ```
 
 ```{r}
-geography_levels <- c(select_area, select_counties, select_msa)
+geography_levels <- c(select_area_name, select_counties, select_msa)
 
 geography_levels <-
   rlang::set_names(
     geography_levels,
     c(
-      select_area_name,
-      "Baltimore City",
-      "Baltimore MSA"
+      select_area_name_plot,
+      select_counties_name,
+      select_msa_name
     )
   )
 
@@ -55,6 +70,10 @@ combine_acs <-
 # Summary
 
 ```{r}
+tables <- c("B19013", "B25003", "B01003")
+
+
+# FIXME: There should be a helper to pull a table and then rename columns
 area_summary_data <- combine_acs %>%
   pull_table(table = "B19013") %>%
   select(
@@ -62,17 +81,21 @@ area_summary_data <- combine_acs %>%
     median_income_estimate = estimate,
     median_income_moe = moe
   ) |>
-  left_join(pull_table(combine_acs,
-    table = "B25003",
-    vars = "B25003_001"
-  ) |>
-    select(
-      name,
-      total_population_estimate = estimate,
-      total_population_moe = moe
-    )) |>
   left_join(
-    pull_table(combine_acs, table = "B01003") |>
+    combine_acs |>
+      pull_table(table = "B01003") |>
+      select(
+        name,
+        total_population_estimate = estimate,
+        total_population_moe = moe
+      )
+  ) |>
+  left_join(
+    combine_acs |>
+      pull_table(
+        table = "B25003",
+        vars = "B25003_001"
+      ) |>
       select(
         name,
         occupied_units_estimate = estimate,
@@ -106,9 +129,11 @@ area_summary_data |>
     c(total_population_estimate, occupied_units_estimate),
     decimals = 0
   ) |>
-  gt::tab_source_note("Source: 2017-2021 ACS 5-year Estimates")
+  gt_census_source(
+    tables = tables
+  )
 
-# area_summary_data |> 
+# area_summary_data |>
 # ggplot() +
 # aes(x = perc_estimate, y = column_title, fill = as.integer(column_title)) +
 # geom_col(color = NA) +
@@ -120,11 +145,10 @@ area_summary_data |>
 # cols4all::scale_fill_continuous_c4a_seq()
 ```
 
-
 ```{r}
 combine_acs %>%
   pull_table(table = "B25003") %>%
-  filter(perc_estimate < 1) %>%
+  filter(perc_estimate < 1, geography != "Metro area") %>%
   mutate(
     column_title = fct_recode_with_list(
       column_title,
@@ -137,7 +161,8 @@ combine_acs %>%
   ggplot() +
   aes(x = perc_estimate, y = column_title, fill = column_title) +
   geom_col(color = NA) +
-  scale_fill_brewer(palette = "Dark2") +
+  plot_fill_scale(palette = "misc.okabe") +
+  # scale_fill_brewer(palette = "Dark2") +
   scale_x_continuous(labels = scales::label_percent()) +
   geom_errorbarh(aes(xmin = perc_estimate - moe_perc, xmax = perc_estimate + moe_perc),
     linewidth = 0.35, height = 0.35
@@ -153,16 +178,25 @@ combine_acs %>%
 
 if (params$save_plot) {
   papersize::ggsave_ext(
-    filename = glue::glue("{janitor::make_clean_names(select_area_label)}_tenure_plot.pdf"),
-    fileext = "pdf",
-    paper = "Albert",
+    filename = glue::glue("{janitor::make_clean_names(select_area_label)}_tenure_plot.", select_fileext),
+    width = 7,
+    height = 3,
+    orientation = "landscape"
+    #  device = cairo_pdf,
+    #  width = 6, height = 4
+  )
+
+  papersize::ggsave_ext(
+    filename = glue::glue("{janitor::make_clean_names(select_area_label)}_tenure_plot.png"),
+    fileext = select_fileext,
+    width = 8,
+    height = 3.5,
     orientation = "landscape"
     #  device = cairo_pdf,
     #  width = 6, height = 4
   )
 }
 ```
-
 
 ```{r}
 combine_acs %>%
@@ -187,8 +221,7 @@ combine_acs %>%
   cols4all::scale_fill_continuous_c4a_seq()
 ```
 
-
-# By race/ethnicity  
+# By race/ethnicity
 
 ```{r}
 combine_acs |>
@@ -199,7 +232,7 @@ combine_acs |>
     race_category != "Total"
   ) |>
   select(any_of("name"), race_category, column_title, ends_with("estimate"), contains("moe"), -moe_denom) |>
-  group_by(name, race_category) |> 
+  group_by(name, race_category) |>
   gt::gt() |>
   gt::tab_options(
     # row_group.as_column = TRUE
@@ -207,21 +240,22 @@ combine_acs |>
   gt_census_cols()
 ```
 
-
 ```{r}
+tables <- c("B19013", "B19013A", "B19013B", "B19013I")
+
 combine_acs |>
-  pull_table(table = c("B19013", "B19013A", "B19013B", "B19013I")) |> #  "B19013C", "B19013D", "B19013E", "B19013F", "B19013G", "B19013H",
+  pull_table(table = tables) |> #  "B19013C", "B19013D", "B19013E", "B19013F", "B19013G", "B19013H",
   # View()
-  bind_race_category_col() |> 
+  bind_race_category_col() |>
   rename(
     median_income_estimate = estimate,
     median_income_moe = moe
   ) |>
-  filter(name == "Baltimore City") |> 
+  filter(name == "Baltimore City") |>
   select(
     # category,
     race_category,
-   # name,
+    # name,
     median_income_estimate,
     median_income_moe
   ) |>
@@ -233,14 +267,14 @@ combine_acs |>
   gt::fmt_currency(
     columns = c(median_income_estimate, median_income_moe),
     decimals = 0
-    ) |>
-  gt::cols_merge_uncert(median_income_estimate, median_income_moe) |> 
+  ) |>
+  gt::cols_merge_uncert(median_income_estimate, median_income_moe) |>
   gt::cols_label(
     "race_category" = "Race",
     "median_income_estimate" = "Median income ($)"
-  )
+  ) |>
+  gt_census_source(tables = tables)
 ```
-
 
 ```{r}
 combine_acs |>
@@ -262,25 +296,32 @@ combine_acs |>
     moe = tidycensus::moe_sum(moe, estimate),
     perc_estimate = sum(perc_estimate)
   ) |>
-  filter(name %in% c("John Ruhrah EMS Area", "Baltimore City")) |>
+  filter(name %in% c(select_area_name_plot, select_counties_name)) |>
   pivot_wider(
     names_from = "name",
     values_from = c("perc_estimate", "estimate", "moe")
   ) |>
   janitor::clean_names("snake") |>
+  # names()
   gt::gt() |>
   gt::cols_merge_uncert(estimate_baltimore_city, moe_baltimore_city) |>
-  gt::cols_merge_uncert(estimate_john_ruhrah_ems_area, moe_john_ruhrah_ems_area) |>
+  # FIXME: How can this be parameterized?
+  gt::cols_merge_uncert(estimate_reach_and_hh_building_area, moe_reach_and_hh_building_area) |>
+  # gt::cols_merge_uncert(estimate_john_ruhrah_ems_area, moe_john_ruhrah_ems_area) |>
   gt::fmt_number(starts_with("moe"), decimals = 0) |>
+  gt::fmt_number(starts_with("estimate"), decimals = 0) |>
   gt::fmt_percent(starts_with("perc_estimate"), decimals = 0) |>
   gt::tab_spanner("% share", starts_with("perc_estimate")) |>
   gt::tab_spanner("Households", c(starts_with("estimate"), starts_with("moe"))) |>
   gt::cols_label(
-    "column_title" = "Income category"
+    "column_title" = "Income category",
+    "perc_estimate_reach_and_hh_building_area" = select_area_name_plot,
+    "perc_estimate_baltimore_city" = select_counties_name,
+    "estimate_reach_and_hh_building_area" = select_area_name_plot,
+    "estimate_baltimore_city" = select_counties_name,
   ) |>
-  gt::tab_source_note("Source: 2017-2021 ACS 5-year Estimates")
+  gt_census_source("Source: 2017-2021 ACS 5-year Estimates", tables = "B19001")
 ```
-
 
 ```{r}
 race_data <- combine_acs %>%
@@ -295,8 +336,8 @@ race_data <- combine_acs %>%
     column_title = fct_relevel(column_title, c("Latino", "White", "Black"))
   )
 
-race_data |> 
-  gt() |> 
+race_data |>
+  gt() |>
   gt_census_cols()
 
 race_data %>%
@@ -313,15 +354,25 @@ race_data %>%
   guides(fill = "none") +
   facet_wrap(~name, ncol = 1) +
   plot_theme() +
-  plot_fill_scale() +
+  plot_fill_scale(palette = "misc.okabe") +
   theme(
     plot.margin = papersize::get_margin("minimal")
   )
 
 
+papersize::ggsave_ext(
+  filename = glue::glue("{janitor::make_clean_names(select_area_label)}_race_ethnicity_plot.png"),
+  fileext = "pdf",
+  width = 7,
+  height = 4,
+  orientation = "landscape"
+  #  device = cairo_pdf,
+  #  width = 6, height = 4
+)
+
 if (params$save_plot) {
   papersize::ggsave_ext(
-    filename = glue::glue("{janitor::make_clean_names(select_area_label)}_tenure_plot.png"),
+    filename = glue::glue("{janitor::make_clean_names(select_area_label)}_race_ethnicity_plot.", select_fileext),
     fileext = "png",
     paper = "Albert",
     orientation = "landscape"
@@ -330,7 +381,6 @@ if (params$save_plot) {
   )
 }
 ```
-
 
 ```{r}
 combine_acs %>%
@@ -380,4 +430,19 @@ if (params$save_plot) {
     #  width = 6, height = 4
   )
 }
+```
+
+```{r}
+# FIXME: Consider replacing this with a plot
+combine_acs |>
+  pull_table(table = "B23025") |>
+  filter(column_title %in% c("Employed", "Unemployed", "Not in labor force")) |>
+  select(any_of("name"), column_title, ends_with("estimate"), contains("moe"), -moe_denom) |>
+  group_by(name) |>
+  gt::gt() |>
+  gt_census_cols(
+    est_col_label = "Est. population (age 16+ yrs.)",
+    perc_col_label = "% of total",
+    tables = "B23025"
+  )
 ```
