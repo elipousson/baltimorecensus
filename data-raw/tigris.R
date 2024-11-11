@@ -9,14 +9,29 @@ county_fips <- "510"
 msa_county_names <- c("Baltimore", "Anne Arundel", "Carroll", "Harford", "Howard", "Queen Anne's")
 county_pumace10 <- c("00801", "00802", "00803", "00804", "00805")
 
+
+# https://github.com/r-spatial/sf/issues/1341#issuecomment-1120284345
+escape_crs <- function(x) {
+  sf::st_crs(x)$wkt <- gsub(
+    "°|º", "\\\u00b0",
+    sf::st_crs(x)$wkt
+  )
+
+  x
+}
+
 prep_data <- function(x, ..., case = "snake", crs = 3857) {
   x <- janitor::clean_names(x, case)
   x <- janitor::remove_empty(x, which = "cols")
   x <- janitor::remove_constant(x, na.rm = TRUE)
+
   if (!inherits(x, "sf")) {
     return(x)
   }
-  sf::st_transform(x, crs)
+
+  x <- sf::st_transform(x, crs)
+
+  escape_crs(x)
 }
 
 # U.S. Census blocks ----
